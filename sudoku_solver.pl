@@ -58,7 +58,8 @@ blocks([A,B,C|Bs1],[D,E,F|Bs2],[G,H,I|Bs3], [Block|Blocks]) :-
     Block = [A,B,C,D,E,F,G,H,I],
     blocks(Bs1, Bs2, Bs3, Blocks).
 
-sumBetween1And9([Sum|List]) :-
+sumBetween1And9(ListSum) :-
+  reverse(ListSum,[Sum|List]),
   length(List, 9),
   List ins 1..9,
   all_distinct(List),
@@ -84,7 +85,9 @@ sumBetween1And9([Sum|List]) :-
   nodeArcs(Boundary,B,C,BA2),
   sharedNodeArcs(OutSet,C,OA2),
   flatten([OA1,BA1,IA,BA2,OA2], Arcs),
-  trace, /* Current error point... says graph is impossible.
+  automaton(List, [source(A), sink(C)], Arcs).
+
+/* Current error point... says graph is impossible.
   Need to test whether it's a constraint conflict or if my
   graph logic is flawed...
 
@@ -103,8 +106,6 @@ sumBetween1And9([Sum|List]) :-
     flatten([ArsO1,ArsB1,ArsI,ArsB2,ArsO2], Ars),
     automaton(List, [source(A), sink(C)], Ars),
     label(List).*/
-  automaton(List, [source(A), sink(C)], Arcs).
-
 sudoku(Rows) :-
   length(Rows, 9),
   maplist(same_length(Rows), Rows),
