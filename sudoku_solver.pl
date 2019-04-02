@@ -36,5 +36,5 @@ sudoku(Rows) :-
   trace,
   maplist(onethroughnine, Columns),
   maplist(onethroughnine, Blocks),
-  label(Values).
+  label(Values).:- use_module(library(clpfd)).
   
