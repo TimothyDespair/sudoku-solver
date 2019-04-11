@@ -1,62 +1,45 @@
 :- use_module(library(clpfd)).
 
-nodeArcsOfList([FirstStep|Rest], [FirstN,FinalN], [Arc|Arcs]) :-
-  Arc = arc(FirstN,FirstStep,NextN),
-  nodeArcsOfList(Rest, NextN, FinalN, Arcs).
-nodeArcsOfList([LastStep|[]], PrevN, FinalN, [Arc]) :-
-  Arc = arc(PrevN,LastStep,FinalN).
-nodeArcsOfList([Step|Rest], PrevN, FinalN, [Arc|Arcs]) :-
-  Arc = arc(PrevN,Step,NextN),
-  nodeArcsOfList(Rest, NextN, FinalN, Arcs).
+loop(Node, List, Arcs) :-
+   arcs(Node, List, Node, Arcs).
 
-rangeCapArcs([],_,[]).
-rangeCapArcs([Head|Rest], CapNode, [Arc|Arcs]) :-
-  Arc = arc(CapNode, Head, CapNode),
-  rangeCapArcs(Rest, CapNode, Arcs).
-
-contains(Range, SubList, List) :-
-  nodeArcsOfList(SubList, [FirstN, FinalN], Arcs1),
-  rangeCapArcs(Range, FirstN, Arcs2),
-  rangeCapArcs(Range, FinalN, Arcs3),
-  flatten([Arcs1,Arcs2,Arcs3], Arcs),
-  automaton(List, [source(FirstN), sink(FinalN)], Arcs).
-
-contains_either(Range, A, B, List) :-
-  nodeArcsOfList(A, [FirstN,FinalN], Arcs1),
-  nodeArcsOfList(B, [FirstN,FinalN], Arcs2),
-  rangeCapArcs(Range, FirstN, Arcs3),
-  rangeCapArcs(Range, FinalN, Arcs4),
-  flatten([Arcs1, Arcs2, Arcs3, Arcs4], Arcs),
-  automaton(List, [source(FirstN), sink(FinalN)], Arcs).
-
-/* Turn this into an in-set/out-set/boundary deal for sum-sudoku:
- * a-> outset <-b-> boundary <-c-> inset */
-
-sharedNodeArcs(List, Node, Arcs) :-
-   nodeArcs(List, Node, Node, Arcs).
-
-nodeArcs([],_,_,[]).
-nodeArcs([Step|Rest], Node1, Node2, [Arc|Arcs]) :-
+arcs(_,[],_,[]).
+arcs( Node1,[Step|Rest], Node2, [Arc|Arcs]) :-
   Arc = arc(Node1, Step, Node2),
-  nodeArcs(Rest, Node1, Node2, Arcs).
+  arcs(Node1, Rest, Node2, Arcs).
 
-listDom([], Domain) :-
-  Domain = 0..0.
-listDom([Head|Rest], Domain) :-
-  listDom(Rest, RestDom),
-  Domain = Head \/ RestDom.
+% Not useful for what I'm doing right now, but you should be able to
+% adapt this to grow multiple "cultures" by removing every step after
+% TTT and using WallL as both source and sink.
+agar_plate(Substrate, Membranes, Tissue, [WallL, WallR], AgarPlate) :-
+  arcs(WallL, Membranes, TissueLoop, WMT),
+  arcs(WallL, Substrate, SubstrateLoopL, WSS),
+  loop(SubstrateLoopL, Substrate, SSL),
+  arcs(SubstrateLoopL, Membranes, TissueLoop, SMT),
+  loop(TissueLoop, Tissue, TTT),
+  arcs(TissueLoop, Membranes, SubstrateLoopR, TMS),
+  loop(SubstrateLoopR, Substrate, LSS),
+  arcs(SubstrateLoopR, Substrate, WallR, SSW),
+  arcs(TissueLoop, Membranes, WallR, TMW),
+  flatten([WMT,WSS,SSL,SMT,TTT,TMS,LSS,SSW,TMW], AgarPlate).
 
-notIns(Dom, Item) :-
-  #\ Item in Dom.
+agar_growth(Dish, Plate, Result) :-
+  Dish = [WallL, WallR],
+  automaton(Result, [source(WallL), sink(WallR)], Plate).
 
-blocks([A,B,C,D,E,F,G,H,I], Blocks) :-
-    blocks(A,B,C,Block1), blocks(D,E,F,Block2), blocks(G,H,I,Block3),
-    append([Block1, Block2, Block3], Blocks).
+agar_super_plate([Substrate1,Substrate2], Membrane, [Tissue1,Tissue2], Dish, SuperPlate) :-
+  agar_plate(Substrate1, Membrane, Tissue1, Dish, Plate1),
+  agar_plate(Substrate2, Membrane, Tissue2, Dish, Plate2),
+  flatten([Plate1, Plate2], SuperPlate).
 
-blocks([], [], [], []).
-blocks([A,B,C|Bs1],[D,E,F|Bs2],[G,H,I|Bs3], [Block|Blocks]) :-
-    Block = [A,B,C,D,E,F,G,H,I],
-    blocks(Bs1, Bs2, Bs3, Blocks).
+agar_hyper_plate(Substrates, Membrane, Tissues, Dish, HyperPlate) :-
+  agar_hyper_plate_(Substrates, Membrane, Tissues, Dish, Plates),
+  flatten(Plates, HyperPlate).
+
+agar_hyper_plate_([],_,[],_,[]).
+agar_hyper_plate_([Substrate|Substrates], Membrane, [Tissue|Tissues], Dish, [Plate|Plates]) :-
+  agar_plate(Substrate, Membrane, Tissue, Dish, Plate),
+  agar_hyper_plate_(Substrates, Membrane, Tissues, Dish, Plates).
 
 sum_set(Sum, Set) :-
   between(0,7,Length),
@@ -70,65 +53,61 @@ sum_set(Sum, Set) :-
 sum_sets(Sum, Sets) :-
   setof(Set, sum_set(Sum, Set), Sets).
 
+list_dom([], Domain) :-
+  Domain = 0..0.
+list_dom([Head|Rest], Domain) :-
+  list_dom(Rest, RestDom),
+  Domain = Head \/ RestDom.
+
+not_ins(Dom, Item) :-
+  #\ Item in Dom.
+
 ins_outs([Ins, Outs]) :-
-  OutsLength is 7 - InsLength),
   length(Ins, InsLength),
   length(Outs, OutsLength),
+  OutsLength is 7 - InsLength,
   all_distinct(Outs),
   Outs ins 2..8,
-  listDom(Ins, InsDom),
-  maplist(notIns(InsDom), Outs),
-  label(outs).
+  list_dom(Ins, InsDom),
+  maplist(not_ins(InsDom), Outs),
+  chain(Outs, #>),
+  label(Outs).
 
-all_ins_outs([Ins], [InsOuts]) :-
-  InsOuts = [Ins, Outs],
-  ins_outs(InsOuts).
-all_ins_outs([Ins|InsRest], [InsOuts|InsOutsRest]) :-
-  InsOuts = [Ins, Outs],
-  ins_outs(InsOuts),
-  all_ins_outs(InsRest,InsOutsRest).
+all_ins_outs([Ins], [Outs]) :-
+  ins_outs([Ins, Outs]).
+all_ins_outs([Ins|InsRest], [Outs|OutsRest]) :-
+  ins_outs([Ins, Outs]),
+  all_ins_outs(InsRest,OutsRest).
 
-sumBetween1And9(ListSum) :-
+membranes(Membranes) :-
+  length(Membranes, 2),
+  all_distinct(Membranes),
+  Membranes ins 1\/9,
+  chain(Membranes, #>),
+  label(Membranes).
+
+sum_between_1_and_9(ListSum) :-
   reverse(ListSum,[Sum|List]),
   length(List, 9),
   List ins 1..9,
   all_distinct(List),
-  % Boundary Logic
-  length(Boundary, 2),
-  all_distinct(Boundary),
-  Boundary ins 1\/9,
-  label(Boundary),
-  % Ins/Outs
-  once(sum_sets(Sum, AllIns)), % Once Because these are deteminative.
-  once(all_ins_outs(AllIns, AllInsOuts)),
-  % TODO below figure out optional automata.
-  sharedNodeArcs(OutSet,A,OA1),
-  nodeArcs(Boundary,A,B,BA1),
-  sharedNodeArcs(InSet,B,IA),
-  nodeArcs(Boundary,B,C,BA2),
-  sharedNodeArcs(OutSet,C,OA2),
-  flatten([OA1,BA1,IA,BA2,OA2], Arcs),
-  automaton(List, [source(A), sink(C)], Arcs).
+  % Membranes/Ins/Outs
+  once(membranes(Membranes)),
+  once(sum_sets(Sum, Tissue)), % Once Because these are deteminative.
+  once(all_ins_outs(Tissue, Substrate)),
+  % HyperState Automaton to Check Ever Permutation at Once.
+  agar_hyper_plate(Substrate, Membranes, Tissue, Dish, HyperPlate),
+  agar_growth(Dish, HyperPlate, List).
 
-/* Current error point... says graph is impossible.
-  Need to test whether it's a constraint conflict or if my
-  graph logic is flawed...
+blocks([A,B,C,D,E,F,G,H,I], Blocks) :-
+    blocks(A,B,C,Block1), blocks(D,E,F,Block2), blocks(G,H,I,Block3),
+    append([Block1, Block2, Block3], Blocks).
 
-  This works: So it's not my graph logic.
-  length(List, 9),
-    List ins 1..9,
-    all_distinct(List),
-    Outs=[2,3,5,6,7,8],
-	Bnds=[1,9],
-	Ins=[4],
-	sharedNodeArcs(Outs,A,ArsO1),
-	nodeArcs(Bnds,A,B,ArsB1),
-    sharedNodeArcs(Ins,B,ArsI),
-    nodeArcs(Bnds,B,C,ArsB2),
-    sharedNodeArcs(Outs,C,ArsO2),
-    flatten([ArsO1,ArsB1,ArsI,ArsB2,ArsO2], Ars),
-    automaton(List, [source(A), sink(C)], Ars),
-    label(List).*/
+blocks([], [], [], []).
+blocks([A,B,C|Bs1],[D,E,F|Bs2],[G,H,I|Bs3], [Block|Blocks]) :-
+    Block = [A,B,C,D,E,F,G,H,I],
+    blocks(Bs1, Bs2, Bs3, Blocks).
+
 sudoku(Rows) :-
   length(Rows, 9),
   maplist(same_length(Rows), Rows),
@@ -139,7 +118,7 @@ sudoku(Rows) :-
   maplist(all_distinct, Columns),
   maplist(all_distinct, Blocks).
 
-sumSudoku(Rows) :-
+sum_sudoku(Rows) :-
   length(Rows, 10),
   maplist(same_length(Rows), Rows),
   transpose(Rows, Cols),
@@ -151,7 +130,5 @@ sumSudoku(Rows) :-
   reverse(SudokuRowsVals, [__Sum|RSudokuRows]),
   reverse(RSudokuRows, SudokuRows),
   sudoku(SudokuRows),
-  maplist(sumBetween1And9, JustRows),
-  maplist(sumBetween1And9, JustCols).
-  
-    
+  maplist(sum_between_1_and_9, JustRows),
+  maplist(sum_between_1_and_9, JustCols).   
