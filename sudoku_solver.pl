@@ -58,27 +58,50 @@ blocks([A,B,C|Bs1],[D,E,F|Bs2],[G,H,I|Bs3], [Block|Blocks]) :-
     Block = [A,B,C,D,E,F,G,H,I],
     blocks(Bs1, Bs2, Bs3, Blocks).
 
+sum_set(Sum, Set) :-
+  between(0,7,Length),
+  length(Set, Length),
+  Set ins 2..8,
+  all_distinct(Set),
+  sum(Set, #=, Sum),
+  chain(Set, #>),
+  label(Set).
+
+sum_sets(Sum, Sets) :-
+  setof(Set, sum_set(Sum, Set), Sets).
+
+ins_outs([Ins, Outs]) :-
+  OutsLength is 7 - InsLength),
+  length(Ins, InsLength),
+  length(Outs, OutsLength),
+  all_distinct(Outs),
+  Outs ins 2..8,
+  listDom(Ins, InsDom),
+  maplist(notIns(InsDom), Outs),
+  label(outs).
+
+all_ins_outs([Ins], [InsOuts]) :-
+  InsOuts = [Ins, Outs],
+  ins_outs(InsOuts).
+all_ins_outs([Ins|InsRest], [InsOuts|InsOutsRest]) :-
+  InsOuts = [Ins, Outs],
+  ins_outs(InsOuts),
+  all_ins_outs(InsRest,InsOutsRest).
+
 sumBetween1And9(ListSum) :-
   reverse(ListSum,[Sum|List]),
   length(List, 9),
   List ins 1..9,
   all_distinct(List),
+  % Boundary Logic
   length(Boundary, 2),
   all_distinct(Boundary),
   Boundary ins 1\/9,
   label(Boundary),
-  length(InSet,InSetLength),
-  InSetLength in 0..7,
-  InSet ins 2..8,
-  sum(InSet, #=, Sum),
-  label(InSet),
-  OutSetLength is 7 - InSetLength,
-  length(OutSet,OutSetLength),
-  all_distinct(OutSet),
-  OutSet ins 2..8,
-  listDom(InSet, InSetDomain),
-  maplist(notIns(InSetDomain), OutSet),
-  label(OutSet),
+  % Ins/Outs
+  once(sum_sets(Sum, AllIns)), % Once Because these are deteminative.
+  once(all_ins_outs(AllIns, AllInsOuts)),
+  % TODO below figure out optional automata.
   sharedNodeArcs(OutSet,A,OA1),
   nodeArcs(Boundary,A,B,BA1),
   sharedNodeArcs(InSet,B,IA),
@@ -128,7 +151,6 @@ sumSudoku(Rows) :-
   reverse(SudokuRowsVals, [__Sum|RSudokuRows]),
   reverse(RSudokuRows, SudokuRows),
   sudoku(SudokuRows),
-  trace,
   maplist(sumBetween1And9, JustRows),
   maplist(sumBetween1And9, JustCols).
   
